@@ -292,7 +292,7 @@ class WorkThread(threading.Thread):
         threading.Thread.__init__(self)
         self.socket = s
     def run(self):
-        global taskQueue,stopFlag
+        global taskQueue, stopFlag
         while True:
             if stopFlag == True:
                 print("WorkThread Ended")
@@ -322,6 +322,7 @@ class WorkThread(threading.Thread):
                 
 
 def run():
+    global stopFlag
     listenIp = "0.0.0.0"
     listenPort = 123
     s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
