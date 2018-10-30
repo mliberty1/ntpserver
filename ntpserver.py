@@ -1,14 +1,40 @@
+# The MIT License (MIT)
+# 
+# Copyright (c) {{{2014}}} {{{ChenLi}}}
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+# A Python based ntp server.
+# Upstream https://github.com/limifly/ntpserver
+# Forked https://github.com/mliberty1/ntpserver
+
 import datetime
 import socket
 import struct
 import time
-import Queue
-import mutex
+import queue
 import threading
 import select
 
-taskQueue = Queue.Queue()
+taskQueue = queue.Queue()
 stopFlag = False
+
 
 def system_to_ntp_time(timestamp):
     """Convert a system time to a NTP time.
@@ -21,6 +47,7 @@ def system_to_ntp_time(timestamp):
     """
     return timestamp + NTP.NTP_DELTA
 
+
 def _to_int(timestamp):
     """Return the integral part of a timestamp.
 
@@ -31,6 +58,7 @@ def _to_int(timestamp):
     integral part
     """
     return int(timestamp)
+
 
 def _to_frac(timestamp, n=32):
     """Return the fractional part of a timestamp.
@@ -43,6 +71,7 @@ def _to_frac(timestamp, n=32):
     fractional part
     """
     return int(abs(timestamp - _to_int(timestamp)) * 2**n)
+
 
 def _to_time(integ, frac, n=32):
     """Return a timestamp from an integral and fractional part.
@@ -57,7 +86,6 @@ def _to_time(integ, frac, n=32):
     """
     return integ + float(frac)/2**n	
 		
-
 
 class NTPException(Exception):
     """Exception raised by this module."""
@@ -113,6 +141,7 @@ class NTP:
         3: "alarm condition (clock not synchronized)",
     }
     """leap indicator table"""
+
 
 class NTPPacket:
     """NTP packet class.
@@ -237,35 +266,36 @@ class NTPPacket:
         
 
 class RecvThread(threading.Thread):
-    def __init__(self,socket):
+    def __init__(self, s):
         threading.Thread.__init__(self)
-        self.socket = socket
+        self.socket = s
     def run(self):
         global taskQueue,stopFlag
         while True:
             if stopFlag == True:
-                print "RecvThread Ended"
+                print("RecvThread Ended")
                 break
             rlist,wlist,elist = select.select([self.socket],[],[],1);
             if len(rlist) != 0:
-                print "Received %d packets" % len(rlist)
+                print("Received %d packets" % len(rlist))
                 for tempSocket in rlist:
                     try:
                         data,addr = tempSocket.recvfrom(1024)
                         recvTimestamp = recvTimestamp = system_to_ntp_time(time.time())
                         taskQueue.put((data,addr,recvTimestamp))
-                    except socket.error,msg:
-                        print msg;
+                    except socket.error as msg:
+                        print(msg);
+
 
 class WorkThread(threading.Thread):
-    def __init__(self,socket):
+    def __init__(self, s):
         threading.Thread.__init__(self)
-        self.socket = socket
+        self.socket = s
     def run(self):
         global taskQueue,stopFlag
         while True:
             if stopFlag == True:
-                print "WorkThread Ended"
+                print("WorkThread Ended")
                 break
             try:
                 data,addr,recvTimestamp = taskQueue.get(timeout=1)
@@ -285,31 +315,34 @@ class WorkThread(threading.Thread):
                 sendPacket.SetOriginTimeStamp(timeStamp_high,timeStamp_low)
                 sendPacket.recv_timestamp = recvTimestamp
                 sendPacket.tx_timestamp = system_to_ntp_time(time.time())
-                socket.sendto(sendPacket.to_data(),addr)
-                print "Sended to %s:%d" % (addr[0],addr[1])
-            except Queue.Empty:
+                self.socket.sendto(sendPacket.to_data(),addr)
+                print("Sended to %s:%d" % (addr[0],addr[1]))
+            except queue.Empty:
                 continue
                 
-        
-listenIp = "0.0.0.0"
-listenPort = 123
-socket = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-socket.bind((listenIp,listenPort))
-print "local socket: ", socket.getsockname();
-recvThread = RecvThread(socket)
-recvThread.start()
-workThread = WorkThread(socket)
-workThread.start()
 
-while True:
-    try:
-        time.sleep(0.5)
-    except KeyboardInterrupt:
-        print "Exiting..."
-        stopFlag = True
-        recvThread.join()
-        workThread.join()
-        #socket.close()
-        print "Exited"
-        break
-        
+def run():
+    listenIp = "0.0.0.0"
+    listenPort = 123
+    s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+    s.bind((listenIp,listenPort))
+    print("local socket: ", s.getsockname());
+    recvThread = RecvThread(s)
+    recvThread.start()
+    workThread = WorkThread(s)
+    workThread.start()
+
+    while True:
+        try:
+            time.sleep(0.5)
+        except KeyboardInterrupt:
+            print("Exiting...")
+            stopFlag = True
+            recvThread.join()
+            workThread.join()
+            #socket.close()
+            print("Exited")
+            break
+            
+if __name__ == '__main__':
+    run()
